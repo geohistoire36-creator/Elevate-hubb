@@ -2465,9 +2465,19 @@
                 today.setHours(0, 0, 0, 0); // Début de la journée actuelle
                 const withSnap = await db.collection("withdrawals")
                                          .where("uid", "==", currentUserUid)
-                                         .where("date", ">=", today)
                                          .get();
-                if(withSnap.size >= 2) {
+                
+                let todayWithdrawalsCount = 0;
+                withSnap.forEach(doc => {
+                    let wData = doc.data();
+                    if (wData.date && typeof wData.date.toDate === 'function') {
+                        if (wData.date.toDate() >= today) {
+                            todayWithdrawalsCount++;
+                        }
+                    }
+                });
+
+                if(todayWithdrawalsCount >= 2) {
                     customAlert("Vous avez déjà atteint la limite de 2 retraits pour aujourd'hui.");
                     return;
                 }
@@ -2658,3 +2668,5 @@
             new Chart(ctx, { type: 'line', data: { labels: ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'], datasets: [{ label: 'Performance', data: [12, 19, 15, 25, 22, 30, 45], borderColor: '#f39c12', tension: 0.4, fill: false }] }, options: { plugins: { legend: { display: false } } } });
         }
     </script>
+    </body>
+</html>
