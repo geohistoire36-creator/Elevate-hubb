@@ -1528,7 +1528,7 @@
             
             if(!phone || !pass) { customAlert("Veuillez remplir les champs"); return; }
             const fullPhone = code + phone;
-            const fakeEmail = `${fullPhone.replace('+','')}@hepu.com`; // Gardé pour la rétrocompatibilité des anciens comptes
+            const fakeEmail = `${fullPhone.replace('+','')}@hepu.com`; 
 
             if (isLoginMode) {
                 try { await auth.signInWithEmailAndPassword(fakeEmail, pass); } 
@@ -1543,7 +1543,7 @@
                         phoneNumber: fullPhone, 
                         balance: 500,
                         revenue: 0,
-                        inviteCode: "ELEVATE" + fullPhone.substring(fullPhone.length - 4),
+                        inviteCode: "ELEVATE" + fullPhone.substring(fullPhone.length - 4), // CORRIGÉ : Utilise ELEVATE pour la cohérence
                         referredBy: refCode || "Aucun",
                         blocked: false,
                         claimedBonuses: [],
@@ -1600,8 +1600,11 @@
             
             document.getElementById('profile-phone').innerText = phone;
             
+            // CORRIGÉ : Gère les anciens codes et uniformise l'affichage pour le partage
             let shortPhone = phone.length >= 4 ? phone.substring(phone.length - 4) : phone;
-            const inviteCodeText = data.inviteCode ? data.inviteCode.toUpperCase() : "ELEVATE" + shortPhone;
+            let dbCode = data.inviteCode || ("ELEVATE" + shortPhone);
+            const inviteCodeText = dbCode.toUpperCase().replace("SKIL", "ELEVATE");
+            
             document.getElementById('my-invite-code').innerText = inviteCodeText;
             
             let baseUrl = "https://elevate-hubb.vercel.app//"; 
@@ -1610,7 +1613,6 @@
             let cleanPhone = phone.replace(/\s+/g, '').replace('+', '');
             const adminBtn = document.getElementById('admin-menu-btn');
             
-            // Gestion de l'affichage du bouton Admin
             if (cleanPhone === "22666867654" || cleanPhone === "22604650382") { 
                 if(adminBtn) adminBtn.style.display = 'flex'; 
             } else {
@@ -1618,7 +1620,6 @@
             }
         }
 
-        // Configuration spéciale pour l'admin secondaire
         function setupAdminPanelForUser(cleanPhone) {
             if (cleanPhone === "22604650382") {
                 document.getElementById('tab-admin-users').style.display = 'none';
@@ -1754,10 +1755,25 @@
                     lastClaimedAt: firebase.firestore.Timestamp.now()
                 });
 
+                // CORRIGÉ : Fonction robuste pour trouver le parrain peu importe la casse (ELEVATE vs SKIL vs minuscules)
+                const getSponsorDoc = async (refCode) => {
+                    if (!refCode || refCode === "Aucun") return null;
+                    let upperRef = refCode.toUpperCase();
+                    let lowerRef = refCode.toLowerCase();
+                    let skilRef = upperRef.replace("ELEVATE", "skil");
+                    let skilUpper = upperRef.replace("ELEVATE", "SKIL");
+                    
+                    let queries = [refCode, upperRef, lowerRef, skilRef, skilUpper];
+                    let uniqueQueries = [...new Set(queries)]; // Retire les doublons
+
+                    let snap = await db.collection("users").where("inviteCode", "in", uniqueQueries).get();
+                    if (!snap.empty) return snap.docs[0];
+                    return null;
+                };
+
                 if (isFirstPurchase && userData.referredBy && userData.referredBy !== "Aucun") {
-                    const snapA = await db.collection("users").where("inviteCode", "==", userData.referredBy).get();
-                    if (!snapA.empty) {
-                        let docA = snapA.docs[0];
+                    let docA = await getSponsorDoc(userData.referredBy);
+                    if (docA) {
                         let dataA = docA.data();
                         let commA = price * 0.26; 
                         batch.update(docA.ref, {
@@ -1766,9 +1782,8 @@
                         });
 
                         if (dataA.referredBy && dataA.referredBy !== "Aucun") {
-                            const snapB = await db.collection("users").where("inviteCode", "==", dataA.referredBy).get();
-                            if (!snapB.empty) {
-                                let docB = snapB.docs[0];
+                            let docB = await getSponsorDoc(dataA.referredBy);
+                            if (docB) {
                                 let dataB = docB.data();
                                 let commB = price * 0.02; 
                                 batch.update(docB.ref, {
@@ -1777,9 +1792,8 @@
                                 });
 
                                 if (dataB.referredBy && dataB.referredBy !== "Aucun") {
-                                    const snapC = await db.collection("users").where("inviteCode", "==", dataB.referredBy).get();
-                                    if (!snapC.empty) {
-                                        let docC = snapC.docs[0];
+                                    let docC = await getSponsorDoc(dataB.referredBy);
+                                    if (docC) {
                                         let dataC = docC.data();
                                         let commC = price * 0.01; 
                                         batch.update(docC.ref, {
@@ -1894,20 +1908,30 @@
                 });
                 teamFirstPurchases = firstPurchases;
 
-                const cachedData = localStorage.getItem('hepu_user_data_' + currentUserUid);
-                let myData = cachedData ? JSON.parse(cachedData) : {};
+                // CORRIGÉ : Affichage fiable de l'équipe (Insensible à la casse, match ELEVATE et anciens SKIL)
                 let shortPhone = currentUserPhone.length >= 4 ? currentUserPhone.substring(currentUserPhone.length - 4) : currentUserPhone;
-                let myCode = (myData.inviteCode || "ELEVATE" + shortPhone).toUpperCase();
-                
-                teamData.lvl1 = allUsers.filter(u => u.referredBy && u.referredBy.toUpperCase() === myCode);
+                let userDataString = localStorage.getItem('hepu_user_data_' + currentUserUid);
+                let myData = userDataString ? JSON.parse(userDataString) : null;
+                let myCode = (myData && myData.inviteCode ? myData.inviteCode : ("ELEVATE" + shortPhone)).toUpperCase();
+
+                teamData.lvl1 = allUsers.filter(u => {
+                    let ref = (u.referredBy || "").toUpperCase();
+                    return ref === myCode || ref === ("ELEVATE" + shortPhone).toUpperCase() || ref === ("SKIL" + shortPhone).toUpperCase();
+                });
                 let lvl1Codes = teamData.lvl1.map(u => (u.inviteCode || "").toUpperCase());
                 let commA = teamData.lvl1.reduce((sum, u) => sum + (firstPurchases[u.uid] || 0) * 0.26, 0);
 
-                teamData.lvl2 = allUsers.filter(u => u.referredBy && lvl1Codes.includes(u.referredBy.toUpperCase()));
+                teamData.lvl2 = allUsers.filter(u => {
+                    let ref = (u.referredBy || "").toUpperCase();
+                    return lvl1Codes.includes(ref) || lvl1Codes.includes(ref.replace("ELEVATE", "SKIL")) || lvl1Codes.includes(ref.replace("SKIL", "ELEVATE"));
+                });
                 let lvl2Codes = teamData.lvl2.map(u => (u.inviteCode || "").toUpperCase());
                 let commB = teamData.lvl2.reduce((sum, u) => sum + (firstPurchases[u.uid] || 0) * 0.02, 0);
 
-                teamData.lvl3 = allUsers.filter(u => u.referredBy && lvl2Codes.includes(u.referredBy.toUpperCase()));
+                teamData.lvl3 = allUsers.filter(u => {
+                    let ref = (u.referredBy || "").toUpperCase();
+                    return lvl2Codes.includes(ref) || lvl2Codes.includes(ref.replace("ELEVATE", "SKIL")) || lvl2Codes.includes(ref.replace("SKIL", "ELEVATE"));
+                });
                 let commC = teamData.lvl3.reduce((sum, u) => sum + (firstPurchases[u.uid] || 0) * 0.01, 0);
 
                 document.getElementById('lvl1-count-main').innerText = teamData.lvl1.length;
@@ -2130,9 +2154,18 @@
                     let dateInsc = dtObj.toLocaleDateString('fr-FR') + ' à ' + dtObj.toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit'});
                     let parrain = u.referredBy && u.referredBy !== "Aucun" ? u.referredBy : "Aucun";
 
-                    let invitedUsers = users.filter(x => x.referredBy && u.inviteCode && x.referredBy.toUpperCase() === u.inviteCode.toUpperCase());
-                    let invitedHtml = "";
+                    // CORRIGÉ : Affichage fiable des amis dans l'administration (Insensible à la casse)
+                    let uCode = (u.inviteCode || "").toUpperCase();
+                    let shortP = u.phoneNumber && u.phoneNumber.length >= 4 ? u.phoneNumber.substring(u.phoneNumber.length - 4) : u.phoneNumber;
+                    let altCode1 = "ELEVATE" + shortP;
+                    let altCode2 = "SKIL" + shortP;
+
+                    let invitedUsers = users.filter(x => {
+                        let ref = (x.referredBy || "").toUpperCase();
+                        return ref !== "AUCUN" && ref !== "" && (ref === uCode || ref === altCode1 || ref === altCode2);
+                    });
                     
+                    let invitedHtml = "";
                     if(invitedUsers.length > 0) {
                         invitedHtml = `<div style="margin-top:8px; font-size:11px; background:#222; padding:8px; border-radius:5px; border-left: 2px solid #f39c12;"><b>${invitedUsers.length} Ami(s) invité(s) :</b><br>`;
                         invitedUsers.forEach(inv => {
