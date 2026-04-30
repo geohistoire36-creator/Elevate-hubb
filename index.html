@@ -1377,7 +1377,7 @@
         <div class="nav-item" onclick="switchPage('product-page', this)"><i class="fas fa-th-large"></i>Produit</div>
         <div class="nav-item" onclick="switchPage('team-page', this); loadTeamStats();"><i class="fas fa-user-friends"></i>Équipe</div>
         <div class="nav-item" onclick="switchPage('profile-page', this)"><i class="fas fa-user"></i>Mien</div>
-    </nav>   <script>
+    </nav>  <script>
         // --- CONFIGURATION FIREBASE ---
        const firebaseConfig = {
   apiKey: "AIzaSyAHwId57QZXWDowQ5Rtz-Sw36vgqRv20J0",
@@ -1543,7 +1543,7 @@
                         phoneNumber: fullPhone, 
                         balance: 500,
                         revenue: 0,
-                        inviteCode: "skil" + fullPhone.substring(fullPhone.length - 4),
+                        inviteCode: "ELEVATE" + fullPhone.substring(fullPhone.length - 4),
                         referredBy: refCode || "Aucun",
                         blocked: false,
                         claimedBonuses: [],
@@ -1601,7 +1601,7 @@
             document.getElementById('profile-phone').innerText = phone;
             
             let shortPhone = phone.length >= 4 ? phone.substring(phone.length - 4) : phone;
-            const inviteCodeText = "Elevate" + shortPhone;
+            const inviteCodeText = data.inviteCode ? data.inviteCode.toUpperCase() : "ELEVATE" + shortPhone;
             document.getElementById('my-invite-code').innerText = inviteCodeText;
             
             let baseUrl = "https://elevate-hubb.vercel.app//"; 
@@ -1894,18 +1894,20 @@
                 });
                 teamFirstPurchases = firstPurchases;
 
+                const cachedData = localStorage.getItem('hepu_user_data_' + currentUserUid);
+                let myData = cachedData ? JSON.parse(cachedData) : {};
                 let shortPhone = currentUserPhone.length >= 4 ? currentUserPhone.substring(currentUserPhone.length - 4) : currentUserPhone;
-                let myCode = "Elevate" + shortPhone;
+                let myCode = (myData.inviteCode || "ELEVATE" + shortPhone).toUpperCase();
                 
-                teamData.lvl1 = allUsers.filter(u => u.referredBy === myCode);
-                let lvl1Codes = teamData.lvl1.map(u => u.inviteCode);
+                teamData.lvl1 = allUsers.filter(u => u.referredBy && u.referredBy.toUpperCase() === myCode);
+                let lvl1Codes = teamData.lvl1.map(u => (u.inviteCode || "").toUpperCase());
                 let commA = teamData.lvl1.reduce((sum, u) => sum + (firstPurchases[u.uid] || 0) * 0.26, 0);
 
-                teamData.lvl2 = allUsers.filter(u => lvl1Codes.includes(u.referredBy));
-                let lvl2Codes = teamData.lvl2.map(u => u.inviteCode);
+                teamData.lvl2 = allUsers.filter(u => u.referredBy && lvl1Codes.includes(u.referredBy.toUpperCase()));
+                let lvl2Codes = teamData.lvl2.map(u => (u.inviteCode || "").toUpperCase());
                 let commB = teamData.lvl2.reduce((sum, u) => sum + (firstPurchases[u.uid] || 0) * 0.02, 0);
 
-                teamData.lvl3 = allUsers.filter(u => lvl2Codes.includes(u.referredBy));
+                teamData.lvl3 = allUsers.filter(u => u.referredBy && lvl2Codes.includes(u.referredBy.toUpperCase()));
                 let commC = teamData.lvl3.reduce((sum, u) => sum + (firstPurchases[u.uid] || 0) * 0.01, 0);
 
                 document.getElementById('lvl1-count-main').innerText = teamData.lvl1.length;
@@ -2128,8 +2130,8 @@
                     let dateInsc = dtObj.toLocaleDateString('fr-FR') + ' à ' + dtObj.toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit'});
                     let parrain = u.referredBy && u.referredBy !== "Aucun" ? u.referredBy : "Aucun";
 
+                    let invitedUsers = users.filter(x => x.referredBy && u.inviteCode && x.referredBy.toUpperCase() === u.inviteCode.toUpperCase());
                     let invitedHtml = "";
-                    let invitedUsers = users.filter(x => x.referredBy === u.inviteCode);
                     
                     if(invitedUsers.length > 0) {
                         invitedHtml = `<div style="margin-top:8px; font-size:11px; background:#222; padding:8px; border-radius:5px; border-left: 2px solid #f39c12;"><b>${invitedUsers.length} Ami(s) invité(s) :</b><br>`;
@@ -2623,5 +2625,3 @@
             new Chart(ctx, { type: 'line', data: { labels: ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'], datasets: [{ label: 'Performance', data: [12, 19, 15, 25, 22, 30, 45], borderColor: '#f39c12', tension: 0.4, fill: false }] }, options: { plugins: { legend: { display: false } } } });
         }
     </script>
-</body>
-</html>
